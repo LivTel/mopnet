@@ -1,0 +1,48 @@
+mopnet - network enable of MOPTOP process designed to run on separate NUC PCs.
+         These notes are for version 0.25 for testing in ARI darkroom.
+         Filter wheel functions are not available.
+
+Description:
+Version of the MOPTOP control process intended to run on two separate PCs.
+It uses UDP datagrams to start a run and synchronise processes. 
+A single mopnet process is run on each PC and controlled via the mopcmd utility.
+The process run as Master (on NUC marked MOPTOP1) and Slave (on NUC marked MOPTOP2).
+The camera ID set using the -c option which also sets the approriate Master/Slave options. 
+
+UDP port numbers are hard coded
+  12000 - mopcmd send commands to mopnet master 
+  12001 - mopnet master process, controls camera 1 and  rotator
+  12002 - mopnet slave  process, controls camera 2 only
+
+
+To build mopnet & mopcmd (or use make)
+  ./build
+
+The settings in this release use ARI network addresses.
+IP addresses and default run options are built into mopnet, see mop_dat.h to modify. 
+
+
+To test, check that no mopnet process is already running and then ...
+  mopnet -c1 &  (do this on MOPTOP1 connected to camera CAM1
+  mopnet -c2 &  (do this on MOPTOP2 connected to camera CAM2
+
+The processes can be run on the same NUC but require appropriate options
+  mopnet -c1 -i1 -M 150.204.241.232:12001 -S 150.204.241.232:12002 &
+  mopnet -c2 -i2 -M 150.204.241.232:12001 -S 150.204.241.232:12002 &     
+
+-S identifies the Slave IP:port, -M the Master process IP:port
+
+
+Once mopnet process are running, mopcmd is used to send options to the master, which forwards to the slave process.
+It waits for mopnet replies showing the image file created. 
+
+  ./mopcmd -r1 -n8 -d5  - To run 1 rotation, 8 positions with debug level = 5 (INF)
+                          Waits for 2 x 1 x 8 = 16 reply messages
+
+  ./mopcmd -k           - To kill processes or use "pkill mopnet" on each host PC
+
+
+For help:
+  ./mopnet -h  - Gives a brief description of arguments and default values.
+
+
