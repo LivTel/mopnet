@@ -1,6 +1,20 @@
 mopnet - network enable of MOPTOP process designed to run on separate NUC PCs.
-         These notes are for version 0.25 for testing in ARI darkroom.
+         These notes are for version 0.26 for testing in ARI darkroom.
          Filter wheel functions are not available.
+
+0.30     Path creation added.     
+
+0.29     Added -U option. Synchronises run numbers.
+
+0.28     Default 2xbinning. Removed FITS header duplicates
+
+0.27     Added remote -k process kill option. Uses site IP addresses
+
+0.26	 Added Starlight Xpress 5 position filter wheel, option -w
+         Removed redundant synchronisation code from mop_utl.c
+         Makefile now generates full dependencies
+         Removed -N fixed filer option
+
 
 Description:
 Version of the MOPTOP control process intended to run on two separate PCs.
@@ -14,24 +28,25 @@ UDP port numbers are hard coded
   12001 - mopnet master process, controls camera 1 and  rotator
   12002 - mopnet slave  process, controls camera 2 only
 
-
-To build mopnet & mopcmd (or use make)
+To build and release mopnet 
   ./build
+  sudo cp mopnet mopcmd moprun /usr/local/bin
 
-The settings in this release use ARI network addresses.
+The settings in this release use site network addresses.
 IP addresses and default run options are built into mopnet, see mop_dat.h to modify. 
 
 
-To test, check that no mopnet process is already running and then ...
-  mopnet -c1 &  (do this on MOPTOP1 connected to camera CAM1
-  mopnet -c2 &  (do this on MOPTOP2 connected to camera CAM2
+Testing & Debug
+Check that no mopnet process is already running on each NUC, 'ps -A | grep mopnet',  then ...
+  ./mopnet -c1 -d8 &  Do on MOPTOP1 connected to camera CAM1
+  ./mopnet -c2 -d8 &  Do on MOPTOP2 connected to camera CAM2
 
-The processes can be run on the same NUC but require appropriate options
-  mopnet -c1 -i1 -M 150.204.241.232:12001 -S 150.204.241.232:12002 &
-  mopnet -c2 -i2 -M 150.204.241.232:12001 -S 150.204.241.232:12002 &     
-
+The processes can be run on the same NUC but require appropriate options. For example ...
+  ./mopnet -c1 -i1 -M 192.168.1.28:12001 -S 192.168.1.28:12002 &
+  ./mopnet -c2 -i2 -M 192.168.1.28:12001 -S 192.168.1.28:12002 &
+This is not recommended as 2 cameras on 1 NUC is unreliable.
+     
 -S identifies the Slave IP:port, -M the Master process IP:port
-
 
 Once mopnet process are running, mopcmd is used to send options to the master, which forwards to the slave process.
 It waits for mopnet replies showing the image file created. 
@@ -41,8 +56,19 @@ It waits for mopnet replies showing the image file created.
 
   ./mopcmd -k           - To kill processes or use "pkill mopnet" on each host PC
 
+The mopcmd utility should only be run on MOPTOP1.
+
+
+Release Running
+Use the daemon-like moprun utility to stop/start mopnet on each pc. For example ...
+  moprun start
+  moprun stop
+  moprun status
+
+
+mopcmd can be used to start a run but easier to copy and adapt the template script ~/scripts/goexample which automatically creates the destination directory.
+
 
 For help:
   ./mopnet -h  - Gives a brief description of arguments and default values.
-
 

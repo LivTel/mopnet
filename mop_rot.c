@@ -8,6 +8,8 @@
   */
 
 #include "mopnet.h"
+#define FAC FAC_ROT
+
 
 /** @brief      DEBUG ONLY: Get and log rotator position 
   *  
@@ -22,9 +24,9 @@ double rot_dbg( char *dbg )
     if ( mop_master )
     {
         if ( PI_qPOS( rot_id, rot_axis, &angle ))
-            mop_log( true,  LOG_DBG, FAC_ROT, "angle=%8.3f DBG=%s", angle, dbg );
+            mop_log( true,  LOG_DBG, FAC, "angle=%8.3f DBG=%s", angle, dbg );
         else 
-            mop_log( false, LOG_ERR, FAC_ROT, "PI_qPOS() fail" );
+            mop_log( false, LOG_ERR, FAC, "PI_qPOS() fail" );
     }
 
     return angle;
@@ -54,7 +56,7 @@ bool rot_set( double angle, int timeout )
 {
     double now;
 
-    mop_log( true, LOG_DBG, FAC_ROT, "rot_set(%f)", angle );
+    mop_log( true, LOG_DBG, FAC, "rot_set(%f)", angle );
     PI_qPOS( rot_id, rot_axis, &now );
     PI_MOV(  rot_id, rot_axis, &angle );
     return rot_wait( angle, timeout, (angle > now) );  
@@ -69,7 +71,7 @@ bool rot_set( double angle, int timeout )
   */
 bool rot_move( double angle )
 {
-    mop_log( true, LOG_DBG, FAC_ROT, "rot_move(%f)", angle );
+    mop_log( true, LOG_DBG, FAC, "rot_move(%f)", angle );
     return PI_MOV( rot_id, rot_axis, &angle );
 }
 
@@ -89,7 +91,7 @@ bool rot_goto( double angle, int timeout, double *actual )
     int tick  = TIM_TICK;                          // Timer ticks [ms] 
     int count = TIM_MICROSECOND * timeout / tick;  // Timer count [ms] 
 
-    mop_log( true, LOG_DBG, FAC_ROT, "rot_goto(%f)", angle );
+    mop_log( true, LOG_DBG, FAC, "rot_goto(%f)", angle );
     PI_MOV( rot_id, rot_axis, &angle );
     do
     { 
@@ -99,18 +101,18 @@ bool rot_goto( double angle, int timeout, double *actual )
             if ( actual )
             {
                 PI_qPOS( rot_id, rot_axis, actual );
-                return mop_log( true, LOG_DBG, FAC_ROT, "Goto angle=%f, actual=%f", angle, *actual );
+                return mop_log( true, LOG_DBG, FAC, "Goto angle=%f, actual=%f", angle, *actual );
             }
             else
             {
-                return mop_log( true, LOG_DBG, FAC_ROT, "Goto angle=%f", angle );
+                return mop_log( true, LOG_DBG, FAC, "Goto angle=%f", angle );
             }
         }
 
         usleep(tick);
     } while( count-- );   
 
-    return mop_log( false, LOG_ERR, FAC_ROT, "TIMEOUT: rot_goto(angle=%f timeout=%i)", angle, timeout );
+    return mop_log( false, LOG_ERR, FAC, "TIMEOUT: rot_goto(angle=%f timeout=%i)", angle, timeout );
 }
 
 
@@ -137,12 +139,12 @@ bool rot_wait( double angle, int timeout, bool cw )
              (  cw && dif   >= ROT_TOLERANCE )||  // Moving clockwise and past point
              ( !cw && dif   <= ROT_TOLERANCE )  ) // Moving counter-clockwise and past point
         {
-	    return mop_log( true, LOG_DBG, FAC_ROT, "rot_wait(%f) actual=%f", angle, now );
+	    return mop_log( true, LOG_DBG, FAC, "rot_wait(%f) actual=%f", angle, now );
         }
         usleep(tick);
     } while( count-- );   
 
-    return mop_log( false, LOG_DBG, FAC_ROT, "TIMEOUT: rot_wait(angle=%f, timeout=%i)", angle, timeout );
+    return mop_log( false, LOG_DBG, FAC, "TIMEOUT: rot_wait(angle=%f, timeout=%i)", angle, timeout );
 }
 
 
@@ -156,9 +158,9 @@ bool rot_wait( double angle, int timeout, bool cw )
 bool rot_cmd( char *cmd, char *log )
 {
     if ( PI_GcsCommandset( rot_id, cmd ) != 1 )
-        return mop_log( false, LOG_ERR, FAC_ROT, "cmd='%s' %s", cmd, log );
+        return mop_log( false, LOG_ERR, FAC, "cmd='%s' %s", cmd, log );
     else
-        return mop_log( true,  LOG_DBG, FAC_ROT, "cmd='%s'", cmd );
+        return mop_log( true,  LOG_DBG, FAC, "cmd='%s'", cmd );
 }
 
 
@@ -191,15 +193,15 @@ bool rot_init( char *usb, int baud, int timeout, char *rot_trg_lvl )
     {
         if (try < 5)
         {
-            mop_log( false, LOG_WRN, FAC_ROT, "Rotator %s connection attempt %i", usb, try );
+            mop_log( false, LOG_WRN, FAC, "Rotator %s connection attempt %i", usb, try );
             sleep(1);
         }
         else 
         {
-            return mop_log( false, LOG_CRIT, FAC_ROT, "Abort connecting to rotator %s.", usb );
+            return mop_log( false, LOG_CRIT, FAC, "Abort connecting to rotator %s.", usb );
         }
     }
-    mop_log( true, LOG_DBG, FAC_ROT, "Connected to rotator %s ", usb );
+    mop_log( true, LOG_DBG, FAC, "Connected to rotator %s ", usb );
 
     if (rot_cmd( ROT_CLR_ERR    ,"Clear any errors"          )&&
         rot_cmd( ROT_ALL_STOP   ,"Stop any motion"           )&&
@@ -224,7 +226,7 @@ bool rot_init( char *usb, int baud, int timeout, char *rot_trg_lvl )
     }
     else
     {
-        return mop_log( false,LOG_ERR, FAC_ROT, "rot_init()");
+        return mop_log( false,LOG_ERR, FAC, "rot_init()");
     }
 }
 
@@ -242,14 +244,14 @@ bool rot_trg_ena( bool enable )
         if ( rot_cmd( ROT_TRG_ENA, "Enable trigger" ))
     	    return true;
     	else
-    	    return mop_log( false,LOG_ERR, FAC_ROT, "rot_trg_ena(T)");
+    	    return mop_log( false,LOG_ERR, FAC, "rot_trg_ena(T)");
     }
     else
     {
         if ( rot_cmd( ROT_TRG_DIS, "Disable trigger" ))
     	    return true;
     	else
-    	    return mop_log( false,LOG_ERR, FAC_ROT, "rot_trg_ena(F)");
+    	    return mop_log( false,LOG_ERR, FAC, "rot_trg_ena(F)");
     }
 }	
 
@@ -275,5 +277,5 @@ bool rot_ont( int timeout )
         usleep(tick);
     } while( count-- );   
 
-    return mop_log( false, LOG_ERR, FAC_ROT, "TIMEOUT: rot_ont(%i)", timeout );
+    return mop_log( false, LOG_ERR, FAC, "TIMEOUT: rot_ont(%i)", timeout );
 }

@@ -58,6 +58,9 @@ bool mop_log( bool ret, int level, int fac, char *fmt, ... )
 //      Reset screen colour if not writing to a file 
         if ( log_colour[ level ] && log_fp == stdout )
             fprintf( log_fp, "%s", COL_RESET );
+
+//      Force output
+        fflush( log_fp );
     }
     return ret;
 }

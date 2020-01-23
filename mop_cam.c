@@ -8,6 +8,7 @@
   */
 
 #include "mopnet.h"
+#define FAC FAC_CAM
 
 
 /** @brief     Check Andor API AT_*() function return value
@@ -21,13 +22,13 @@
 bool at_chk( int ret, char *fn, AT_WC *cmd  )
 {
     if ( !ret )
-        return mop_log( true,  LOG_DBG, FAC_CAM, "AT_%s(%ls) OK. Ret=%i", fn, cmd, ret );
+        return mop_log( true,  LOG_DBG, FAC, "AT_%s(%ls) OK. Ret=%i", fn, cmd, ret );
     else if ( ret >= AT_ERR_MIN && ret <= AT_ERR_MAX )
-        return mop_log( false, LOG_ERR, FAC_CAM, "AT_%s(%ls) fail. Ret=%i Err=%s", fn, cmd, ret, at_erray[ret - AT_ERR_MIN]);
+        return mop_log( false, LOG_ERR, FAC, "AT_%s(%ls) fail. Ret=%i Err=%s", fn, cmd, ret, at_erray[ret - AT_ERR_MIN]);
     else if ( ret >= UT_ERR_MIN && ret <= UT_ERR_MAX )
-        return mop_log( false, LOG_ERR, FAC_FTS, "AT_%s(%ls) fail. Ret=%i Err=%s", fn, cmd, ret, ut_erray[ret - UT_ERR_MIN]);
+        return mop_log( false, LOG_ERR, FAC, "AT_%s(%ls) fail. Ret=%i Err=%s", fn, cmd, ret, ut_erray[ret - UT_ERR_MIN]);
     else
-        return mop_log( false, LOG_ERR, FAC_FTS, "AT_%s(%ls) fail. Ret=%i Err=%s", fn, cmd, ret, "ERR_UNKNOWN" );
+        return mop_log( false, LOG_ERR, FAC, "AT_%s(%ls) fail. Ret=%i Err=%s", fn, cmd, ret, "ERR_UNKNOWN" );
 }
 
 /** @brief     Call an AT_ function and retry on failure
@@ -51,14 +52,14 @@ bool at_try( mop_cam_t *cam, void *fn, AT_WC *cmd, ...  )
         va_start( val, cmd );
 
 /*  Yikes! This needs some explaining.
- *  The function to be invoked is passed in and identified using "if" because switch/case can't be used.  
+ *  The function address is passed in and identified using "if" because switch/case can't be used.  
  *  Apart from AT_Open, the camera handle is passed to the function.
  *  cmd is the sub-function to be invoked and is passed as a unicode string
  *  To handle variable types, any parameter is extracted using va_arg() with appropriate type.
  *  Read strings are fixed at maximum length of 255 bytes
- *  The last 2 string params are passed to at_chk() for debug info   
+ *  The last 2 string params are passed onto at_chk() for debug logging   
  */
-//               Function               Fn parameters                               Debug: Fn name & sub-command  
+//                     Function         Fn parameters                     Debug Fn name & sub-command  
         if      (fn == AT_Open         )         
             ok=at_chk( AT_Open         (cam_idx,    &cam->Handle              ),"Open"         ,cmd);
         else if (fn == AT_SetBool      )      
@@ -92,7 +93,7 @@ bool at_try( mop_cam_t *cam, void *fn, AT_WC *cmd, ...  )
         else if (fn == AT_GetEnumStringByIndex)
             ok=at_chk( AT_GetEnumStringByIndex(cam->Handle, cmd, va_arg(val,int), va_arg(val, AT_WC *), MAX_STR-1),"GetEnumStringByIndex", cmd);
         else
-            mop_log( false, LOG_ERR, FAC_CAM, "Unrecognised AT_ function" ); 
+            mop_log( false, LOG_ERR, FAC, "Unrecognised AT_ function" ); 
 
 //      Did the function complete successfully?
         if ( ok ) 
@@ -102,7 +103,7 @@ bool at_try( mop_cam_t *cam, void *fn, AT_WC *cmd, ...  )
         } 
         else
         {
-            mop_log( true, LOG_WRN, FAC_CAM, "retry %i ...", try ); 
+            mop_log( true, LOG_WRN, FAC, "retry %i ...", try ); 
             sleep( AT_DLY );
         }
     }
@@ -124,6 +125,8 @@ bool cam_init( int i )
     memset( &mop_cam, 0, sizeof(mop_cam));
     mop_cam.id       = fts_id[i];
     mop_cam.Handle   = AT_HANDLE_UNINITIALISED;
+
+    fts_ccdxbin = fts_ccdybin = img_bin;
 
 //  Init. Andor camera and conversion utility libraries
     return (at_chk( AT_InitialiseLibrary(),       "InitialiseLibrary"       , L"")&&
@@ -192,7 +195,7 @@ bool cam_cool( mop_cam_t *cam, double TargetTemperature, int timeout, bool fast 
             at_try( cam, AT_GetFloat            ,L"SensorTemperature", &cam->SensorTemperature );
             at_try( cam, AT_GetEnumIndex        ,L"TemperatureStatus", &TempStatusIndex        );
             at_try( cam, AT_GetEnumStringByIndex,L"TemperatureStatus", cam->TemperatureStatus, TempStatusIndex        );
-            mop_log( true, LOG_INF, FAC_CAM, "Thermal=%ls T=%-6.2fC" , cam->TemperatureStatus, cam->SensorTemperature );
+            mop_log( true, LOG_INF, FAC, "Thermal=%ls T=%-6.2fC" , cam->TemperatureStatus, cam->SensorTemperature );
         } while( wcscmp( L"Stabilised", cam->TemperatureStatus) && ( timeout-- > 0 ) );
 
 //  Wait for target temperature to be reached
@@ -202,14 +205,14 @@ bool cam_cool( mop_cam_t *cam, double TargetTemperature, int timeout, bool fast 
         at_try( cam, AT_GetFloat            ,L"SensorTemperature", &cam->SensorTemperature );
         at_try( cam, AT_GetEnumIndex        ,L"TemperatureStatus", &TempStatusIndex        );
         at_try( cam, AT_GetEnumStringByIndex,L"TemperatureStatus", cam->TemperatureStatus, TempStatusIndex        );
-        mop_log( true, LOG_INF, FAC_CAM, "Thermal=%ls T=%-6.2fC" , cam->TemperatureStatus, cam->SensorTemperature );
+        mop_log( true, LOG_INF, FAC, "Thermal=%ls T=%-6.2fC" , cam->TemperatureStatus, cam->SensorTemperature );
     } while ( ( cam->SensorTemperature > TargetTemperature ) && ( timeout-- > 0 ) ); 
 
 //  Was target temperature reached within timeout? 
     if ( timeout <= 0 )
-    	return mop_log( false, LOG_WRN, FAC_CAM, "Cooling Timeout" );
+    	return mop_log( false, LOG_WRN, FAC, "Cooling Timeout" );
     else
-        return mop_log( true,  LOG_INF, FAC_CAM, "Thermal=%ls T=%-6.2fC < %-6.2f", 
+        return mop_log( true,  LOG_INF, FAC, "Thermal=%ls T=%-6.2fC < %-6.2f", 
                         cam->TemperatureStatus, cam->SensorTemperature, TargetTemperature );
 }
 
@@ -225,10 +228,10 @@ bool cam_chk( mop_cam_t *cam )
     AT_BOOL ReadOnly;
     
     at_try( cam, AT_IsReadOnly, L"Framecount", &ReadOnly );
-    mop_log( ReadOnly, LOG_DBG, FAC_CAM, "FrameCount Readonly=%i", ReadOnly );
+    mop_log( ReadOnly, LOG_DBG, FAC, "FrameCount Readonly=%i", ReadOnly );
 
     at_try( cam, AT_IsReadOnly, L"AccumulateCount", &ReadOnly );
-    mop_log( ReadOnly, LOG_DBG, FAC_CAM, "AccumulateCount Readonly=%i", ReadOnly );
+    mop_log( ReadOnly, LOG_DBG, FAC, "AccumulateCount Readonly=%i", ReadOnly );
 
     return true;
 }
@@ -290,10 +293,10 @@ bool cam_conf( mop_cam_t *cam, double exp )
          if ( cam_auto &&   // Use auto exposure 
               rot_sign    ) // and not static
          {
-             cam_exp = exp = fabs((rot_stp / rot_vel)) - 1.5 * cam->ReadoutTime;
+             cam_exp = exp = fabs((rot_stp / rot_vel)) - 2.0 * cam->ReadoutTime;
              at_try(cam, AT_SetFloat, L"ExposureTime", exp         );
              at_try(cam, AT_GetFloat, L"ExposureTime", &cam->ExpVal);
-             mop_log( true, LOG_INF, FAC_CAM, "Automatic exposure = %fs", cam->ExpVal ); 
+             mop_log( true, LOG_INF, FAC, "Automatic exposure = %fs", cam->ExpVal ); 
          }
      
 //       Re-get actual exposure in case it was rounded up/down by camera 
@@ -309,7 +312,7 @@ bool cam_conf( mop_cam_t *cam, double exp )
          cam->ExpDif = cam->ExpReq - cam->ExpVal; // Difference from actual
      
 //       Blank space added to line up camera info output 
-         mop_log( true, LOG_INF, FAC_CAM, 
+         mop_log( true, LOG_INF, FAC, 
                            "Ser. No.   = %ls"
                  LOG_BLANK "Model      = %ls"
                  LOG_BLANK "Firmware   = %ls"
@@ -325,7 +328,7 @@ bool cam_conf( mop_cam_t *cam, double exp )
                  cam->SerialNumber, cam->Model, cam->FirmwareVersion, 
                  cam_trg, cam_enc, cam_mhz, cam_amp, 
                  cam->Gain, cam->WellDepth, cam->DarkCurrent, cam_bin, btoa(cam->FullAOIControl) );
-	 return mop_log( true, LOG_INF, FAC_CAM, 
+	 return mop_log( true, LOG_INF, FAC, 
                                    "ImageSize  = 0x%X bytes"
                          LOG_BLANK "ReadoutTime= %.4f s" 
                          LOG_BLANK "ExpTime    = %.4f s" 
@@ -335,7 +338,7 @@ bool cam_conf( mop_cam_t *cam, double exp )
                          LOG_BLANK "Exp. Total = %i",
 	                 cam->ImageSizeBytes, cam->ReadoutTime, cam->ExpVal, cam->ExpMax, cam->ExpMin, img_cycle, img_total ); 
     }
-    return mop_log( false, LOG_ERR, FAC_CAM, "cam_open()" ); 
+    return mop_log( false, LOG_ERR, FAC, "cam_open()" ); 
 }
 
 
@@ -366,7 +369,7 @@ bool cam_param( mop_cam_t *cam )
            else if (!wcscmp( CAM_MHZ_270, cam_mhz ))
                m = IDX_MHZ_270;
            else
-               return mop_log( false, LOG_ERR, FAC_CAM, "cam_param(). Unsupported read-rate." ); 
+               return mop_log( false, LOG_ERR, FAC, "cam_param(). Unsupported read-rate." ); 
 
 //         Get the gain and noise for the selected read rate
            if      (!wcscmp( CAM_AMP_16L, cam_amp ))
@@ -386,13 +389,13 @@ bool cam_param( mop_cam_t *cam )
            }
            else 
            {
-               return mop_log( false, LOG_ERR, FAC_CAM, "cam_param(). Unsupported pre-amp gain" ); 
+               return mop_log( false, LOG_ERR, FAC, "cam_param(). Unsupported pre-amp gain" ); 
            }
 
            return true;
        }
 
-    return mop_log( false, LOG_ERR, FAC_CAM, "cam_param(). Unrecognised camera=%ls", cam->SerialNumber ); 
+    return mop_log( false, LOG_ERR, FAC, "cam_param(). Unrecognised camera=%ls", cam->SerialNumber ); 
 }
 
 
@@ -409,7 +412,7 @@ bool cam_queue( mop_cam_t *cam )
     for ( int i = 0; i < img_total; i++ )
     { 
         if ( !at_chk( AT_QueueBuffer( cam->Handle, cam->ImageBuffer[b], cam->ImageSizeBytes), "QueueBuffer", L""))
-            return mop_log( false, LOG_ERR, FAC_CAM, "cam_queue()" );
+            return mop_log( false, LOG_ERR, FAC, "cam_queue()" );
 
         if ( ++b >= IMG_CYCLE )
              b = 0;       
@@ -428,14 +431,13 @@ bool cam_alloc( mop_cam_t *cam )
 {
 //  Allocate a conversion buffer in case input is 12-bit. 
 //  Output will be 16-bit mono so double buffer size   
-//  img_mono16size = cam->SensorWidth * cam->SensorHeight;
     img_mono16size = (cam->SensorWidth/img_bin) * (cam->SensorHeight/img_bin);
     if ( !( img_mono16 = aligned_alloc( 16,  2 * img_mono16size )))
-        return mop_log( false, LOG_SYS, FAC_CAM, "Mono16 image aligned_alloc()" );
+        return mop_log( false, LOG_SYS, FAC, "Mono16 image aligned_alloc()" );
 
     for ( int i = 0; i < IMG_CYCLE; i++ )
         if ( !(cam->ImageBuffer[i] = aligned_alloc( 16, cam->ImageSizeBytes )))
-           return mop_log( false, LOG_SYS, FAC_CAM, "aligned_alloc(CIRC)" );
+           return mop_log( false, LOG_SYS, FAC, "aligned_alloc(CIRC)" );
 
     return true;
 }
@@ -455,9 +457,10 @@ bool cam_acq_circ( mop_cam_t *cam )
     double rot_now;
     double timeout = TIM_MILLISECOND * cam->ExpVal + TMO_XFR;
 
-    char msg_buf[1024];
-    int  msg_len;
+    char  msg_buf[1024];
+    int   msg_len;
     char *name;
+    int   next = FTS_NEXT; 
 
 //  If bias frame then use minimum exposure else restore global value
     if ( fts_pfx == FTS_PFX_BIAS )
@@ -481,9 +484,9 @@ bool cam_acq_circ( mop_cam_t *cam )
         cam->RotN[i]   = 1 + (i / img_cycle);
         cam->SeqN[i]   = 1 + (i % img_cycle);
 
-//      Wait for image buffers to be filled.
+//      Wait for image buffer to be filled.
         if ( !at_chk( AT_WaitBuffer( cam->Handle, &cam->ReturnBuffer[b], &cam->ReturnSize[i], timeout ),"WaitBuffer",L""))
-            mop_exit( mop_log( false, LOG_ERR, FAC_CAM, "Missed image %i. Exiting", i+1 ));
+            mop_exit( mop_log( false, LOG_ERR, FAC, "Missed image %i. Exiting", i+1 ));
 
         if ( mop_master )
         {
@@ -492,7 +495,7 @@ bool cam_acq_circ( mop_cam_t *cam )
             cam->RotDif[i] = rot_now - rot_req;
             cam->RotEnd[i] = fmod( rot_now, 360.0 );
         }
-        else // Slave does not have access to rotator postion
+        else // Slave does not have access to rotator position
         {
 //          Fake final angle and length of arc
             cam->RotDif[i] = rot_stp;
@@ -507,13 +510,12 @@ bool cam_acq_circ( mop_cam_t *cam )
 
 //      Write to file 
         gettimeofday(&cam->ObsEnd, NULL);
-        fts_write( name = fts_mkname( cam, fts_pfx, false ), cam, i, b );
-//        msg_len = sprintf( msg_buf, "%s%i r%2.2i n%-2.2i %c", MSG_IMG, cam_num+1, cam->RotN[i], cam->SeqN[i], fts_pfx );
+        fts_write( name = fts_mkname( cam, fts_pfx, &next ), cam, i, b );
         msg_len = sprintf( msg_buf, "%s", name );
-        msg_send( 0, msg_buf, ipcommand, NULL ); 
+        msg_send( 0, msg_buf, ipcommand, NULL, 0 ); 
 
 //      Logging
-        mop_log( true, LOG_IMG, FAC_CAM,
+        mop_log( true, LOG_IMG, FAC,
                 "Exp %2.2i %-2.2i %f Rot %9.2f %7.2f %7.2f Dif %6.2f %6.4f %5.4f %c",
                  cam->RotN[i],   cam->SeqN[i],   cam->ExpVal, cam->RotReq[i], cam->RotAng[i],
                  cam->RotEnd[i], cam->RotDif[i], fabs(cam->RotDif[i]/rot_vel - rot_sign*cam->ExpVal), clk_dif,
@@ -550,6 +552,7 @@ bool cam_acq_stat( mop_cam_t *cam )
     int  msg_len;
 
     char *name;
+    int   next = FTS_NEXT;
 
 //  If bias frame then use minimum exposure else restore global value
     if ( fts_pfx == FTS_PFX_BIAS )
@@ -576,32 +579,31 @@ bool cam_acq_stat( mop_cam_t *cam )
         if ( mop_master ) // Master process
         {
             if ( !rot_goto( rot_req, TMO_ROTATOR, &cam->RotEnd[i] ) )
-                return mop_log( false, LOG_ERR, FAC_CAM, "rot_goto(Static)");
+                return mop_log( false, LOG_ERR, FAC, "rot_goto(Static)");
            
 //          If not single camera mode send signal to slave 
             if ( !one_cam )
             {
-                if ( msg_send( TMO_MSG, MSG_TRG, ipslave, MSG_ACK ) )
-                    mop_log( true, LOG_DBG, FAC_CAM, "Master sent SW trigger" );
+                if ( msg_send( TMO_MSG, MSG_TRG, ipslave, MSG_ACK, strlen(MSG_ACK) ) )
+                    mop_log( true, LOG_DBG, FAC, "Master sent SW trigger" );
                 else
-                    return mop_log( false, LOG_ERR, FAC_CAM, "msg_send()");
+                    return mop_log( false, LOG_ERR, FAC, "msg_send()");
             }
         }
         else // Slave process 
         {
             cam->RotEnd[i] = rot_req;
-            if ( !msg_recv( TMO_MSG, msg_buf, sizeof(msg_buf), &msg_len, MSG_TRG ))
-                return mop_log( false, LOG_ERR, FAC_CAM, "cam_acq_stat() timeout.");
-            mop_log( true, LOG_DBG, FAC_CAM, "Slave received SW trigger" );
+            if ( !msg_recv( TMO_MSG, msg_buf, sizeof(msg_buf), &msg_len, MSG_TRG, strlen(MSG_TRG)))
+                return mop_log( false, LOG_ERR, FAC, "cam_acq_stat() timeout.");
+            mop_log( true, LOG_DBG, FAC, "Slave received SW trigger" );
         }
 
         at_try( cam, AT_Command, L"SoftwareTrigger", NULL );
         if (!at_chk( AT_WaitBuffer(cam->Handle, &cam->ReturnBuffer[b], &cam->ReturnSize[i], timeout),"WaitBuffer",L""))
-            return mop_log( false, LOG_ERR, FAC_CAM, "Missed image %i", i+1 );
+            return mop_log( false, LOG_ERR, FAC, "Missed image %i", i+1 );
 
         cam->RotEnd[i] = fmod( cam->RotEnd[i], 360.0 );
         cam->RotDif[i] = cam->RotEnd[i] - cam->RotAng[i];
-
         cam->TimestampClock[i] = cam_ticks( cam, b );
         if (i)
             clk_dif = (double)(cam->TimestampClock[i] - cam->TimestampClock[i-1]) / cam->TimestampClockFrequency;
@@ -610,13 +612,12 @@ bool cam_acq_stat( mop_cam_t *cam )
 
 //      Write to file 
         gettimeofday(&cam->ObsEnd, NULL);
-        fts_write( fts_mkname( cam, fts_pfx, false ), cam, i, b );
+        fts_write( fts_mkname( cam, fts_pfx, &next ), cam, i, b );
         msg_len = sprintf( msg_buf, "%s", name );
-//        msg_len = sprintf( msg_buf, "%s%i r%2.2i n%-2.2i %c", MSG_IMG, cam_num+1, cam->RotN[i], cam->SeqN[i], fts_pfx );
-        msg_send( 0, msg_buf, ipcommand, NULL ); 
+        msg_send( 0, msg_buf, ipcommand, NULL, 0 ); 
 
 //      Logging
-        mop_log( true, LOG_IMG, FAC_CAM,
+        mop_log( true, LOG_IMG, FAC,
                 "Exp %2.2i %-2.2i %f Rot %9.2f %7.2f %7.2f Dif %6.2f %6.4f %5.4f %c",
                  cam->RotN[i],   cam->SeqN[i],   cam->ExpVal, cam->RotReq[i], cam->RotAng[i],
                  cam->RotEnd[i], cam->RotDif[i], fabs(cam->RotDif[i]/rot_vel - rot_sign*cam->ExpVal), clk_dif,
@@ -744,16 +745,16 @@ bool cam_acq_ena( mop_cam_t *cam, AT_BOOL new )
         if ( new == AT_TRUE ) 
         {
            if (at_try( cam, AT_Command, L"AcquisitionStart", NULL))
-               return mop_log( true , LOG_INF, FAC_CAM, "Command(AcquisitionStart)");
+               return mop_log( true , LOG_INF, FAC, "Command(AcquisitionStart)");
            else
-               return mop_log( false, LOG_ERR, FAC_CAM, "Command(AcquisitionStart)");
+               return mop_log( false, LOG_ERR, FAC, "Command(AcquisitionStart)");
         }
         else 
         {
             if (at_try( cam, AT_Command, L"AcquisitionStop", NULL))
-                return mop_log( true , LOG_INF, FAC_CAM, "Command(AcquisitionStop)");
+                return mop_log( true , LOG_INF, FAC, "Command(AcquisitionStop)");
             else
-                return mop_log( false, LOG_ERR, FAC_CAM, "Command(AcquisitionStop)");
+                return mop_log( false, LOG_ERR, FAC, "Command(AcquisitionStop)");
         }
     }
 

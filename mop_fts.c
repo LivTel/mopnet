@@ -16,6 +16,7 @@
   */
 
 #include "mopnet.h"
+#define FAC FAC_FTS
 
 // Module common data used by dirent() function
 char  fts_file_str[MAX_STR]; //!< filename body.   Used by fts_selname() file search 
@@ -41,13 +42,13 @@ int fts_selname(const struct dirent *entry )
   *            Checks existing files to evaluate run and sequence numbers.
   *            Called mulitple time so uses static data for name vars. 
   * 
-  * @param[in] *cam   = pointer to camera data structure
-  * @param[in]  typ   = character identifying file type 
-  * @param[in]  first = boolean indicating first call to function 
+  * @param[in] *cam  = pointer to camera data structure
+  * @param[in]  typ  = character identifying file type 
+  * @param[in]  frun = -1=first call, 0=generate next filename, >0 = force run number 
   *
   * @return    string pointer to a generated filename held locally 
   */
-char *fts_mkname( mop_cam_t *cam, char typ, bool first )
+char *fts_mkname( mop_cam_t *cam, char typ, int *frun )
 {
     int     i; 
     time_t  tim;          // Unix time, since 1970-01-01
@@ -65,9 +66,16 @@ char *fts_mkname( mop_cam_t *cam, char typ, bool first )
     int c; // Camera number 
     int r; // Possible run number  
 
+//  Force run number
+    if ( *frun > 0 )
+    {
+        run = *frun;
+        return NULL;
+    } 
+
     // If not first call generate the next filename using saved values 
     // 1+ to correct modulus arithmetic as sequences start at 1 (rather than 0)
-    if ( ! first )
+    if ( *frun == FTS_NEXT )
     {
         sprintf( filename, "%s/%c_%c_%04i%02i%02i_%i_%i_%i_0.fits",
                  fts_dir, cam->id, typ, year, mon, day, run, 1+(cam->seq)/img_cycle, 1+(cam->seq)%img_cycle );
@@ -77,12 +85,11 @@ char *fts_mkname( mop_cam_t *cam, char typ, bool first )
     } 
 
 //  First call so clear flag and init. sequence number       
-    first    = false;    
     cam->seq = 0;
 
 //  Get time now and convert to broken-down numeric fields    
     if ( time(&tim) == (time_t) -1 )
-        mop_log( false, LOG_SYS, FAC_FTS, "time()" );
+        mop_log( false, LOG_SYS, FAC, "time()" );
     now = localtime(&tim);
     day  = now->tm_mday;
     mon  = now->tm_mon  + 1;
@@ -91,7 +98,7 @@ char *fts_mkname( mop_cam_t *cam, char typ, bool first )
 
 //  32-bit Unix time rolls-over in 2038. So has it been fixed yet?      
     if (year>2038)
-        mop_log( true, LOG_WRN, FAC_FTS, "Year > 2038 unix bug?");
+        mop_log( true, LOG_WRN, FAC, "Year > 2038 unix bug?");
 
 //  MJD starts at mid-day so adjust day count
     if (hour <= 11)
@@ -135,6 +142,9 @@ char *fts_mkname( mop_cam_t *cam, char typ, bool first )
        while ( i-- )
            free( fts_files[i] );
     }
+
+//  Return suggested run number
+    *frun = run;
 
     return NULL;
 }
@@ -205,18 +215,14 @@ bool fts_write( char *filename, mop_cam_t *cam, int seq, int buf )
     if (stat)
     {
         fits_get_errstatus(stat, text);
-        mop_log( false, LOG_ERR, FAC_FTS, "fits_create_file(%s) status=%i=%s", filename, stat, text );
+        mop_log( false, LOG_ERR, FAC, "fits_create_file(%s) status=%i=%s", filename, stat, text );
     }
 
     fits_create_img(fp, USHORT_IMG, IMG_DIMENSIONS, cam->Dimension, &stat);
     if (stat)
     {
         fits_get_errstatus(stat, text);
-        mop_log( false, LOG_ERR, FAC_FTS, "fits_create_img() status=%i=%s", stat, text );
-    }
-    else
-    {
-//        mop_log( true,  LOG_DBG, FAC_CAM, "Opened file %s", filename );
+        mop_log( false, LOG_ERR, FAC, "fits_create_img() status=%i=%s", stat, text );
     }
 
 //  Generate start date/time strings    
@@ -228,12 +234,12 @@ bool fts_write( char *filename, mop_cam_t *cam, int seq, int buf )
     strncat( &dt[len], &s[1], sizeof(dt)-1 - len);  // Append fraction omitting decimal point
 
 //  Fake obs. info
-    fits_write_key(fp, TLOGICAL,"SIMPLE  ","T"            ,"FITS standard file"                  ,&stat);
-    fits_write_key(fp, TINT    ,"BITPIX  ",&bitpix        ,"Bits per pixel"                      ,&stat);
-    fits_write_key(fp, TINT    ,"NAXIS   ",&naxis         ,"Number of image axes"                ,&stat);
-    fits_write_key(fp, TINT    ,"NAXIS1  ",&cam->Dimension[IMG_WIDTH] ,"Axis 1: number of pixels",&stat);
-    fits_write_key(fp, TINT    ,"NAXIS2  ",&cam->Dimension[IMG_HEIGHT],"Axis 2: number of pixels",&stat);
-    fits_write_key(fp, TLOGICAL,"EXTEND  ","T"            ,"May contain FITS extensions"         ,&stat);
+    fits_update_key_log(fp, "SIMPLE  ",true          ,NULL                  ,&stat);
+    fits_update_key_lng(fp, "BITPIX  ",bitpix        ,NULL                      ,&stat);
+    fits_update_key_lng(fp, "NAXIS   ",naxis         ,"Number of image axes"                ,&stat);
+    fits_update_key_lng(fp, "NAXIS1  ",cam->Dimension[IMG_WIDTH] ,"Axis 1: number of pixels",&stat);
+    fits_update_key_lng(fp, "NAXIS2  ",cam->Dimension[IMG_HEIGHT],"Axis 2: number of pixels",&stat);
+    fits_update_key_log(fp, "EXTEND  ",true           ,"May contain FITS extensions"         ,&stat);
 
 //  Obs. info
     fits_write_key(fp, TSTRING ,"OBSTYPE ",fts_typ        ,"Type of observation",&stat);
@@ -241,16 +247,8 @@ bool fts_write( char *filename, mop_cam_t *cam, int seq, int buf )
     fits_write_key(fp, TSTRING ,"INSTRUME","MOPTOP"       ,"Instrument name"    ,&stat);
 
 //  Default is with filter but if removed use the -N option
-    if ( tel_clear )
-    {
-        fits_write_key(fp, TSTRING ,"FILTER1 ","None"     ,"Filter "            ,&stat);
-        fits_write_key(fp, TSTRING ,"FILTERI1","None"     ,"Filter ID"          ,&stat);
-    }
-    else
-    {
-        fits_write_key(fp, TSTRING ,"FILTER1 ",cam->Filter    ,"Filter "            ,&stat);
-        fits_write_key(fp, TSTRING ,"FILTERI1",cam->FilterID  ,"Filter ID"          ,&stat);
-    }
+    fits_write_key(fp, TINT    ,"FILTER1 ",&whl_pos       ,"Filter position "   ,&stat);
+    fits_write_key(fp, TSTRING ,"FILTERID",whl_colour[whl_pos],"Filter name"    ,&stat);
 
     fits_write_key(fp, TINT    ,"PRESCAN ",&prescan       ,""                   ,&stat);
     fits_write_key(fp, TINT    ,"POSTSCAN",&postscan      ,""                   ,&stat);
@@ -325,21 +323,27 @@ bool fts_write( char *filename, mop_cam_t *cam, int seq, int buf )
     fits_write_key(fp, TULONG ,"CLKFREQ ",&cam->TimestampClockFrequency, "[Hz] Detector clock tick frequency",&stat);
     fits_write_key(fp, TULONG ,"CLKSTAMP",&cam->TimestampClock[seq],     "Image clock tick value", &stat);
 
-//  Convert to Mono16 using metadata in case 12-bit was selected
-    at_chk( AT_ConvertBufferUsingMetadata( cam->ImageBuffer[buf], img_mono16, cam->ImageSizeBytes, L"Mono16" ),
-           "ConvertBufferUsingMetadata", L"Mono16" );  
 
-//  Write the image and close file
-    fits_write_img(fp, TUSHORT, 1, img_mono16size, img_mono16, &stat);
-    if ( stat )
+    if ( !wcscmp( cam_enc, CAM_ENC_16 ) )
     {
-        fits_get_errstatus(stat, text);
-        mop_log( false, LOG_DBG, FAC_FTS,"fits_write_img() status=%s seq=%i buf=%i ", text, seq, buf );
+//      16-bit so write data straight from buffer    
+//        fits_write_img(fp, TUSHORT, 1, cam->ImageSizeBytes, cam->ImageBuffer[buf], &stat);
+        fits_write_img(fp, TUSHORT, 1, img_mono16size, cam->ImageBuffer[buf], &stat);
     }
     else
     {
-//      mop_log( true,  LOG_DBG, FAC_CAM, "Wrote image to file %s", filename );
+//      12-bit so convert to 16-bit depth before writing
+        at_chk( AT_ConvertBufferUsingMetadata( cam->ImageBuffer[buf], img_mono16, cam->ImageSizeBytes, L"Mono16" ),
+                "ConvertBufferUsingMetadata", L"Mono16" );  
+        fits_write_img(fp, TUSHORT, 1, img_mono16size, img_mono16, &stat);
     }
+
+    if ( stat )
+    {
+        fits_get_errstatus(stat, text);
+        mop_log( false, LOG_DBG, FAC,"fits_write_img() status=%s seq=%i buf=%i ", text, seq, buf );
+    }
+
     fits_close_file(fp, &stat);
 
     return true;

@@ -84,12 +84,25 @@ const char *log_colour[] =
     COL_NULL,  // CMD  - Default 
 }; 
 
+
+// Filter wheel colour names
+const char *whl_colour[] =
+{
+    "?",              // Error/Unknown
+    "Baader L",       // 
+    "Baader R",       // Red
+    "Baader G",       // Green
+    "Baader B",       // Blue
+    "RG-695 Longpass" // Longpass
+};
+
+
 // Camera information from Andor spec. sheet plus filter / orientation
 const cam_info_t cam_info[CAM_COUNT] =
 {
   {
-    .Filter   = "3mm-GG475",
-    .FilterID = "3mm-GG475-02",
+    .Filter   = "",
+    .FilterID = "",
     .PolAngle = 0.0,
     .SerialNumber= L"VSC-04181",
     .Model       = L"ZYLA-4.2P-USB3",
@@ -108,8 +121,8 @@ const cam_info_t cam_info[CAM_COUNT] =
     .mhz[IDX_MHZ_270].noise[IDX_AMP_12L] = 1.09,
     .mhz[IDX_MHZ_270].noise[IDX_AMP_12H] = 7.16 
   },{
-    .Filter   = "3mm-GG475",
-    .FilterID = "3mm-GG475-02",
+    .Filter   = "",
+    .FilterID = "",
     .PolAngle = 90.0,
     .SerialNumber= L"VSC-04151",
     .Model       = L"ZYLA-4.2P-USB3",
@@ -130,11 +143,11 @@ const cam_info_t cam_info[CAM_COUNT] =
   }
 };
 
-// Facility names, NUL is unused
-const char *fac_levels[] = {"NUL","MOP","LOG","UTL","OPT","CAM","ROT","FTS","MSG","CMD" }; 
+// Facility names, NUL is unused. Must match FAC order in mopnet.h
+const char *fac_levels[] = {"NUL","MOP","LOG","UTL","OPT","CAM","ROT","FTS","MSG","WHL","CMD"}; 
 
-// In decreasing order of severity as used for debug level
-const char *log_levels[] = {"NONE","CRIT","SYS", "ERR","WRN","IMG","INF","MSG","DBG","CMD"}; 
+// In decreasing order of severity as used for debug level, Must match LOG order in mopnet.h
+const char *log_levels[] = {"NONE","CRIT","SYS","ERR","WRN","IMG","INF","MSG","DBG","CMD"}; 
 
 int       log_level   = LOG_WRN;     // Default log level
 char      log_pfx[MAX_STR];          // Prefix log lines with this text (debug)
@@ -170,16 +183,18 @@ wchar_t  *cam_mhz     = CAM_MHZ_100; // [MHz] PixelReadOutRate
 wchar_t  *cam_amp     = CAM_AMP_16L; // SimplePreAmpGainControl, bits/noise
 wchar_t  *cam_enc     = CAM_ENC_16;  // Pixel encoding, bits/packed 
 wchar_t  *cam_trg     = CAM_TRG_EDGE;// Camera trigger mode
-wchar_t  *cam_bin     = CAM_BIN_1;   // Camera binning 
 wchar_t  *cam_rd      = CAM_RD_OISIM;// Camera read direction
+wchar_t  *cam_bin     = CAM_BIN_2;   // Camera binning 
 
+int       img_bin     = 2;	     // Image binning - Must match camera binning (cam_bin)
 int       img_total   = IMG_TOTAL;   // Total number of images 
 int       img_cycle   = IMG_CYCLE;   // Images per revolution
 AT_U8    *ImageBuffer = NULL;        // Monolithic memory allocation pointer
 AT_U8    *img_mono16  = NULL;        // Buffer containing image converted to 16-bit monochrome
 AT_64     img_mono16size = 0;        // Size of mono16 alloc'ed buffer
-int       img_bin     = 1;	     // Image binning
 
+int       fts_ccdxbin = 2;           // X binning NOTE: Must equal img_bin
+int       fts_ccdybin = 2;           // Y binning NOTE: Must equal img_bin
 char      fts_id[]    = FTS_ID;      // Permitted list of FITS IDs (first char of filename)
 bool      fts_sync    = true;        // Write files immediately after acquisition
 char      fts_pfx     = FTS_PFX_EXP; // Exposure code prefix
@@ -188,16 +203,16 @@ char      fts_obj[MAX_STR];          // Object name
 char      fts_ra [MAX_STR];          // Object RA
 char      fts_dec[MAX_STR];          // Object DEC
 char      fts_dir[MAX_STR];          // Destination for output files
-int       fts_ccdxbin = 1;           // X binning
-int       fts_ccdybin = 1;	     // Y binning
+int       fts_run;                   // Run number
 
 double    tel_foc     = TEL_UNSET;   // Telescope parameters for FITS file header
 double    tel_cas     = TEL_UNSET;
 double    tel_alt     = TEL_UNSET;
 double    tel_azm     = TEL_UNSET;   
-bool      tel_clear   = false;       // Filter is clear
 
-int       whl_pos     = 0;           // Filter wheel position (place holder) 
+int       whl_pos     = 5;           // Default filter wheel position  
+int       whl_fd      = 0;           // Filter wheel file descriptor 
+char     *whl_dev     = WHL_DEV;     // Filter wheel device
 
 char     *ipmaster    = IPMASTER;    // Master  IP address xx.xx.xx.xx.xx.xx:port
 char     *ipslave     = IPSLAVE;     // Slave   IP address xx.xx.xx.xx.xx.xx:port  
@@ -206,6 +221,7 @@ char     *ipcommand   = IPCOMMAND;   // Command IP address xx.xx.xx.xx.xx.xx:por
 extern char    *at_erray[];
 extern char    *ut_erray[];
 extern char    *log_colour[];
+extern char    *whl_colour[];
 
 extern char    *fac_levels[]; 
 extern char    *log_levels[];
@@ -267,14 +283,16 @@ extern char     fts_dec[MAX_STR];
 extern char     fts_dir[MAX_STR];
 extern int      fts_ccdxbin;
 extern int      fts_ccdybin;
+extern int      fts_run;
 
 extern double   tel_foc;
 extern double   tel_cas;
 extern double   tel_alt;
 extern double   tel_azm;
-extern bool     tel_clear;
 
 extern int      whl_pos; 
+extern char    *whl_dev;
+extern char     whl_fd;
 
 extern char    *ipmaster;
 extern char    *ipslave; 

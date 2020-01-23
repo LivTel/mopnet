@@ -1,0 +1,85 @@
+#!/bin/bash
+
+EXEC="/usr/local/bin/mopnet"
+PROC="mopnet"
+LOG="/var/log/mopnet.log"
+PID=""
+
+# Ensure executable exists 
+#test -x "${EXEC}" || exit 0
+
+#if [ ! -e "${LOGFILE}" ]
+#then
+#	touch "${LOGFILE}"
+#	chmod 640 "${LOGFILE}"
+#	chown root:adm "${LOGFILE}"
+#fi
+
+case "${1}" in
+    start)
+
+#       SERVICE: log_daemon_msg "Starting MOPTOP servics" "${PROC}"
+
+        if [ "`ps -C $PROC | grep -s $PROC`" != "" ]; then
+            echo "$PROC already running"
+            exit 1
+        fi 
+
+#       Camera number comes from host. MOPTOP1=1 (master) else =2 (slave)
+        if [ "`hostname`" == "moptop1" ];then
+            CAM=1
+        else
+            CAM=2
+        fi
+
+#       Spawn process
+        $EXEC -c$CAM &
+
+#       Wait up to 5 seconds for mopnet to start                	 	
+        let n=5
+        while [ ${n} -gt 0 ] && [ "$PID" == "" ]
+        do 
+            PID=`ps -C $PROC | grep -s $PROC`
+            if [ "$PID" != "" ]; then
+                break
+            else 
+               let n--
+               echo -n "."
+               sleep 1
+            fi
+        done
+        
+        if [ "$PID" == "" ]; then
+            echo "Failed to start $PROC"
+            exit 1
+        fi
+
+        exit 0
+    ;;
+
+    stop)
+       pkill $PROC                
+    ;;
+
+    restart)
+        ${0} stop
+	${0} start
+    ;;
+
+
+    status)
+        if [ "`ps -C $PROC | grep -s $PROC`" != "" ]; then
+            echo "$PROC running"
+            exit 0 
+        else
+            echo "$PROC stopped"
+            exit 1 
+        fi 
+    ;;
+
+
+    *)
+        echo "Usage: ${0} {start|stop|restart|status}"
+        exit 1
+    ;;
+esac

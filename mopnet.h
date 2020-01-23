@@ -35,6 +35,10 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
+
+// Linux headers
+#include <linux/hidraw.h>
 
 // Network headers
 #include <arpa/inet.h>
@@ -46,19 +50,19 @@
 #include <atutility.h>	  //!< Andor conversion utils (modified to work with C) 
 #include <fitsio.h>	  //!< Starlink FITS header 
 
-#define MOP_VERSION   "0.25"
-#define MOP_DESCRIP   "Circular buffer. AT Retry. Network enabled. Remote kill." 
+#define MOP_VERSION   "0.30"
+#define MOP_DESCRIP   "Circular buffer. AT-retry. Network sync. Remote kill. +Filter-wheel. Default 2xbin. Run sync. Path creation" 
 #define MOP_PROC      "mopnet" //!< Process name
 
 #define MAX_STR       256 //!<  Maximum string length
 
 // Argument options, OPTS and checks, CHKS 
 // CAM = Camera run-time options, MSG = Message options, CMD = Command options       
-#define OPTS_CAM      "u:l:c:E:i:h?msN"
-#define OPTS_MSG      "e:x:b:f:p:n:o:r:v:t:q:S:M:W:O:R:D:F:C:A:Z:d:a:L:k"
+#define OPTS_CAM      "b:p:m:u:l:c:E:i:h?s"
+#define OPTS_MSG      "U:e:x:f:n:o:r:v:t:q:S:M:W:O:R:D:F:C:A:Z:d:a:L:w:N:k"
 
-#define CHKS_CAM      "ulcEihmsN"
-#define CHKS_MSG      "exbfpnorvtqSMWORDFCAZdaLk"
+#define CHKS_CAM      "bpmulcEihs"
+#define CHKS_MSG      "UexfnorvtqSMWORDFCAZdaLwNk"
 
 #define CAM_ARGS      OPTS_MSG OPTS_CAM 
 #define CAM_CHKS      CHKS_MSG CHKS_CAM
@@ -66,13 +70,13 @@
 #define CMD_CHKS      CHKS_MSG   
 
 // Network addresses
-//#define IPCOMMAND "192.168.1.28:12000" //!< <IP:port> Command process (ARI testing)
-//#define IPMASTER  "192.168.1.28:12001" //!< <IP:port> Master  process (ARI testing)
-//#define IPSLAVE   "192.168.1.29:12002" //!< <IP:port> Slave   process (ARI testing)  
+#define IPCOMMAND "192.168.1.28:12000" //!< <IP:port> Command process (ARI testing)
+#define IPMASTER  "192.168.1.28:12001" //!< <IP:port> Master  process (ARI testing)
+#define IPSLAVE   "192.168.1.29:12002" //!< <IP:port> Slave   process (ARI testing)  
 
-#define IPCOMMAND "150.204.241.232:12000" //!< <IP:port> Command process (ARI testing)
-#define IPMASTER  "150.204.241.232:12001" //!< <IP:port> Master  process (ARI testing)
-#define IPSLAVE   "150.204.240.225:12002" //!< <IP:port> Slave   process (ARI testing) 
+//#define IPCOMMAND "150.204.241.232:12000" //!< <IP:port> Command process (ARI testing)
+//#define IPMASTER  "150.204.241.232:12001" //!< <IP:port> Master  process (ARI testing)
+//#define IPSLAVE   "150.204.240.225:12002" //!< <IP:port> Slave   process (ARI testing) 
 //#define IPSLAVE   "150.204.241.232:12002" //!< <IP:port> Slave   process (ARI testing)  
 
 // Inter-process message types 
@@ -108,17 +112,18 @@
 #define LOG_DBG  8  //!< Debug logging, verbose  
 #define LOG_CMD  9  //!< Log Command process events 
 
-// Facilities (softwre module)
+// Facilities (software module)
 #define FAC_NUL  0  //!< Unused 
-#define FAC_MOP  1  //!< Facility
+#define FAC_MOP  1  //!< Main programme
 #define FAC_LOG  2  //!< Logging
 #define FAC_UTL  3  //!< Utilties
 #define FAC_OPT  4  //!< Option parsing
 #define FAC_CAM  5  //!< Camera operations
 #define FAC_ROT  6  //!< Rotator operations
-#define FAC_FTS  7  //!< FITS files
-#define FAC_MSG  8  //!< Messaging
-#define FAC_CMD  9     
+#define FAC_FTS  7  //!< FITS file handling
+#define FAC_MSG  8  //!< Inter process messaging
+#define FAC_WHL  9  //!< Filter wheel     
+#define FAC_CMD  10 //!< Commands to service 
 
 // ANSI text colour 30=Black, 31=red, 32=green, 33=yellow, 34=blue, 35=magenta, 36=cyan, 37=white  
 #define COL_RED     "\x1b[31m"  
@@ -142,6 +147,7 @@
 #define TMO_ACK	        5               //!< [s]  Timeout Sync. ACK reply               
 #define TMO_MSG         30              //!< [s]  Timeout Sync. on message
 #define TMO_XFR         30000           //!< [ms] Timeout Image transfer  
+#define TMO_WHL         10000           //!< [ms] Timeout filter wheel   
 
 // PI prefix = ROT_
 #define ROT_BAUD        460800          //!< Baud rate 
@@ -184,9 +190,14 @@
 #define ROT_CCW         -1              //!< Counter-clockwise rotation
 #define ROT_STAT         0              //!< Static 
 
-// FITS file definitions
+// Filter wheel defines
+#define WHL_DEV		"/dev/hidraw0"	//!< Filter wheel device 
+
+// FITS file defines
 #define FTS_SFX       "_0.fits"         //!< FITS file suffix 
 #define FTS_PFX       "%i_"             //!< FITS file prefix 
+#define FTS_INIT      -1                //!< Init. fts_mkname() 
+#define FTS_NEXT       0                //!< Get next fts_mkname()
                                            
 // File prefix
 #define FTS_PFX_BIAS  'b'               //!< Bias frame
@@ -205,7 +216,7 @@
 #define FTS_TYP_STD   "STANDARD"        //!< Standard object
 
 #define FTS_ID        "123456"          //!< Permissible set of first character in FITS filename
-#define FTS_DIR       "."               //!< Default destination         
+#define FTS_DIR       "/home/eng/fits/default"   //!< Default destination         
 
 // Defaults used for testing
 #define FTS_OBJ   "Undefined"
@@ -217,12 +228,6 @@
 #define TIM_MILLISECOND  1000.0
 #define TIM_MICROSECOND  1000000.0
 #define TIM_NANOSECOND   1000000000
-
-// For synchronisation via share memory functions  
-#define SHM_RESET      0    //!< Unset state
-#define SHM_STABLE     1    //!< Slave temperature stable
-#define SHM_ROTATE     2    //!< Master rotation start
-#define SHM_TRIG       3    //!< Trigger slave in static mode 
                                
 // Camera idenification
 #define CAM1     0          //!< Device index. 0 is master
@@ -404,7 +409,7 @@ bool cam_trg_set ( mop_cam_t *cam, AT_WC *trg );    // Set trigger mode
 bool cam_clk_rst ( mop_cam_t *cam );                // Reset camera clock to zero
 
 // FITS file functions
-char *fts_mkname( mop_cam_t *cam, char typ, bool first );
+char *fts_mkname( mop_cam_t *cam, char typ, int *frun );
 bool  fts_write ( char *filename, mop_cam_t *cam, int seq, int buf );
 
 // Error & logging functions
@@ -412,12 +417,6 @@ bool mop_log( bool ret, int level, int fac, char *fmt, ... );
 unsigned long cam_ticks( mop_cam_t *cam, int img );
 
 // Utility functions
-bool  utl_mksem     ( void        ); // Semaphore
-bool  utl_sem_stable( int timeout );
-bool  utl_sem_rotate( int timeout );
-bool  utl_mkshm     ( void );        // Shared memory
-bool  utl_shm_post  ( int state, int which );
-bool  utl_shm_wait  ( int state, int which, int timeout, bool reset );
 char *utl_arg2msg   ( int   argc, char *argv[], char  *typ );
 int   utl_msg2arg   ( char *arg[],char *str,    char **typ );
 bool  utl_chk_ip    ( char *ip  );
@@ -430,15 +429,13 @@ int             utl_ts_cmp( struct timespec *t1, struct timespec *t2 );
 
 // Network functions
 bool msg_init( char *ip );
-bool msg_recv( int timeout, char *recv, int max, int *len, char *chk );
-bool msg_send( int timeout, char *send, char *dst, char *recv );
-bool msg_chk ( char *msg,   char *chk );
+bool msg_recv( int timeout, char *recv, int max, int *len, char *exp, int explen );
+bool msg_send( int timeout, char *send, char *dst, char *exp, int explen );
+bool msg_chk ( char *msg,   char *exp, int explen );
 
 // Filter wheel functions
-bool whl_init( int  pos );
-bool whl_set ( int  pos );
-bool whl_get ( int *pos );
-
+bool whl_init( int  pos, int timeout );
+bool whl_conf( int  pos, int timeout );
 
 // Include global data and external definitions
 #include "mop_dat.h"
