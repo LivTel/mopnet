@@ -25,7 +25,7 @@ char  fts_file_pfx[MAX_STR]; //!< filename prefix. Used by fts_selname() file se
 /**
   * @brief       File selection function called by scandir() from within fts_mkname()
   *
-  * @param[out] *entry = structure holding found file names 
+  * @param[in] *entry = structure holding found file names 
   *
   * return       true | false - Does file name match selection criteria
   */
@@ -34,6 +34,22 @@ int fts_selname(const struct dirent *entry )
     return !strncmp( entry->d_name, fts_file_pfx, strlen(fts_file_pfx))&& // Starts with "1_"   
             strstr ( entry->d_name, fts_file_str                      )&& // has today's ISO date  
             strstr ( entry->d_name, FTS_SFX                           );  // and ends with "_0.fits"
+}
+
+
+/**
+  * @brief       File comparison function called by scandir() from within fts_mkname() to sort filenames
+  *
+  *              magic numer 13 is where run number starts. atoi terminates conversion at the '_' char
+  *
+  * @param[in] **entry1 = pointer to 1st entry holding a found file names 
+  * @param[in] **entry2 = pointer to 2nd entry holding a found file names 
+  *
+  * return       true | false - is run number of entry1 > run number of entry2 
+  */
+int fts_compare( const struct dirent **entry1, const struct dirent **entry2 )
+{
+    return atoi( (*entry1)->d_name+13 ) > atoi( (*entry2)->d_name+13 );
 }
 
 
@@ -132,7 +148,8 @@ char *fts_mkname( mop_cam_t *cam, char typ, int *frun )
     for ( run = 1, c = 1; c <= CAM_COUNT; c++ )
     {
         sprintf( fts_file_pfx, FTS_PFX, c );
-        i = scandir( fts_dir, &fts_files, fts_selname, versionsort );
+//        i = scandir( fts_dir, &fts_files, fts_selname, versionsort );
+        i = scandir( fts_dir, &fts_files, fts_selname, fts_compare );
         if ( i ) 
         {
            r = atoi( fts_files[i-1]->d_name+13 );

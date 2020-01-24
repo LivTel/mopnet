@@ -214,15 +214,16 @@ bool mop_opts(int argc, char *argv[], char *valid, char *check )
             case 'U': // Suggest run starting number 
                 fts_run = FTS_INIT;
                 mop_log( !fts_mkname( &mop_cam, fts_pfx, &fts_run ), LOG_DBG, FAC, "fts_mkname(INIT)");
-                if ( fts_run > atoi(optarg) ) 
+                if ( fts_run < atoi(optarg) ) 
                 {
-                    mop_log( false, LOG_WRN, FAC, "Run=%i too low, using run=%i ", atoi(optarg), fts_run ); 
-                }
-                else
-                {
+                    mop_log( true, LOG_WRN, FAC, "Local RUN=%i too low. Re-sync RUN=%i", fts_run, atoi(optarg) ); 
                     fts_run = atoi(optarg);
-//                  mop_log( !fts_mkname( &mop_cam, fts_pfx, &fts_run ), LOG_DBG, FAC, "fts_mkname(FORCE=%i)", fts_run);
                 }
+//                else
+//                {
+//                    fts_run = atoi(optarg);
+//                  mop_log( !fts_mkname( &mop_cam, fts_pfx, &fts_run ), LOG_DBG, FAC, "fts_mkname(FORCE=%i)", fts_run);
+//                }
                 break;
             case 'v': // Set rotation velocity 
                 f = atof(optarg);
@@ -334,7 +335,7 @@ bool mop_opts(int argc, char *argv[], char *valid, char *check )
                     return mop_log( false, LOG_ERR, FAC, "Invalid pixel encoding %s. Use 12, 12PACK or 16", optarg); 
                 break; 
             case 'b': // Set binning
-                switch ( img_bin=atoi(optarg) )
+                switch ( atoi(optarg) )
                 {
                     case 1:
                         cam_bin = CAM_BIN_1;

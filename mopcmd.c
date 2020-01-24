@@ -51,6 +51,7 @@ int main( int argc, char *argv[] )
 //      Wait for expected number of images to be acquired
         for( int i = total; i--; )
         {
+             msg_len = 0;
              if (!mop_log( msg_recv( 20, msg_buf, sizeof(msg_buf)-1, &msg_len, NULL, 0 ), LOG_DBG, FAC, "msg_recv()"))
                  return EXIT_FAILURE;
              if ( msg_len > 0 ) 

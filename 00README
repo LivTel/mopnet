@@ -2,6 +2,8 @@ mopnet - network enable of MOPTOP process designed to run on separate NUC PCs.
          These notes are for version 0.26 for testing in ARI darkroom.
          Filter wheel functions are not available.
 
+0.31     -b now dynamic. Run synchronisation improved. Minor typos/bugfixes 
+
 0.30     Path creation added.     
 
 0.29     Added -U option. Synchronises run numbers.
@@ -65,9 +67,9 @@ Use the daemon-like moprun utility to stop/start mopnet on each pc. For example 
   moprun stop
   moprun status
 
-
 mopcmd can be used to start a run but easier to copy and adapt the template script ~/scripts/goexample which automatically creates the destination directory.
 
+moptemplate is a template script for observations. Copy, modify and run. 
 
 For help:
   ./mopnet -h  - Gives a brief description of arguments and default values.

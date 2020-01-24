@@ -50,19 +50,19 @@
 #include <atutility.h>	  //!< Andor conversion utils (modified to work with C) 
 #include <fitsio.h>	  //!< Starlink FITS header 
 
-#define MOP_VERSION   "0.30"
-#define MOP_DESCRIP   "Circular buffer. AT-retry. Network sync. Remote kill. +Filter-wheel. Default 2xbin. Run sync. Path creation" 
+#define MOP_VERSION   "0.31"
+#define MOP_DESCRIP   "Circular buffer AT-retry Net.Sync. -k kill +Filter-wheel. Default 2xbin. Run sync. Path fix, Bin fix"  
 #define MOP_PROC      "mopnet" //!< Process name
 
 #define MAX_STR       256 //!<  Maximum string length
 
 // Argument options, OPTS and checks, CHKS 
 // CAM = Camera run-time options, MSG = Message options, CMD = Command options       
-#define OPTS_CAM      "b:p:m:u:l:c:E:i:h?s"
-#define OPTS_MSG      "U:e:x:f:n:o:r:v:t:q:S:M:W:O:R:D:F:C:A:Z:d:a:L:w:N:k"
+#define OPTS_CAM      "p:m:u:l:c:E:i:h?s"
+#define OPTS_MSG      "b:U:e:x:f:n:o:r:v:t:q:S:M:W:O:R:D:F:C:A:Z:d:a:L:w:N:k"
 
-#define CHKS_CAM      "bpmulcEihs"
-#define CHKS_MSG      "UexfnorvtqSMWORDFCAZdaLwNk"
+#define CHKS_CAM      "pmulcEihs"
+#define CHKS_MSG      "bUexfnorvtqSMWORDFCAZdaLwNk"
 
 #define CAM_ARGS      OPTS_MSG OPTS_CAM 
 #define CAM_CHKS      CHKS_MSG CHKS_CAM

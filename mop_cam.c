@@ -10,7 +10,6 @@
 #include "mopnet.h"
 #define FAC FAC_CAM
 
-
 /** @brief     Check Andor API AT_*() function return value
   *
   * @param[in]  ret = AT_ function return value to be checked
@@ -126,6 +125,7 @@ bool cam_init( int i )
     mop_cam.id       = fts_id[i];
     mop_cam.Handle   = AT_HANDLE_UNINITIALISED;
 
+//  Set FTS binning to match camera image
     fts_ccdxbin = fts_ccdybin = img_bin;
 
 //  Init. Andor camera and conversion utility libraries
@@ -310,6 +310,9 @@ bool cam_conf( mop_cam_t *cam, double exp )
 //       Exposure info
          cam->ExpReq = exp;                       // Requested exposure time
          cam->ExpDif = cam->ExpReq - cam->ExpVal; // Difference from actual
+
+//       Set image size 
+         img_mono16size = (cam->SensorWidth/img_bin) * (cam->SensorHeight/img_bin);  
      
 //       Blank space added to line up camera info output 
          mop_log( true, LOG_INF, FAC, 
@@ -338,7 +341,7 @@ bool cam_conf( mop_cam_t *cam, double exp )
                          LOG_BLANK "Exp. Total = %i",
 	                 cam->ImageSizeBytes, cam->ReadoutTime, cam->ExpVal, cam->ExpMax, cam->ExpMin, img_cycle, img_total ); 
     }
-    return mop_log( false, LOG_ERR, FAC, "cam_open()" ); 
+    return mop_log( false, LOG_ERR, FAC, "cam_conf()" ); 
 }
 
 
@@ -429,14 +432,15 @@ bool cam_queue( mop_cam_t *cam )
   */
 bool cam_alloc( mop_cam_t *cam )
 {
-//  Allocate a conversion buffer in case input is 12-bit. 
-//  Output will be 16-bit mono so double buffer size   
-    img_mono16size = (cam->SensorWidth/img_bin) * (cam->SensorHeight/img_bin);
+//  Set maximum size in words for 1x1 binning. Actual image size handled elsewhere 
+    img_mono16size =  cam->SensorWidth * cam->SensorHeight;
+
+//  Output will be 16-bit mono so double mono buffer size   
     if ( !( img_mono16 = aligned_alloc( 16,  2 * img_mono16size )))
         return mop_log( false, LOG_SYS, FAC, "Mono16 image aligned_alloc()" );
 
     for ( int i = 0; i < IMG_CYCLE; i++ )
-        if ( !(cam->ImageBuffer[i] = aligned_alloc( 16, cam->ImageSizeBytes )))
+        if ( !(cam->ImageBuffer[i] = aligned_alloc( 16, 2 * img_mono16size )))
            return mop_log( false, LOG_SYS, FAC, "aligned_alloc(CIRC)" );
 
     return true;

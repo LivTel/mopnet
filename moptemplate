@@ -1,0 +1,34 @@
+#!/bin/bash
+#
+# Basic template script to take some obs 
+# Files end up in DST
+#
+
+# Default destination directory for observations. Modify as appropriate
+DATE=`date -d "-12 hours" +%Y%m%d`
+DST=~/fits/site/obs/$DATE/
+mkdir -p $DST
+
+# Modify as required
+TYP=e   # e=expose, s=standard, b=bias, d=dark, f=flat, q=acquire   
+EXP=A   # seconds or A=auto 
+ROT=3   # Num of rotations. MAX=100
+VEL=45  # Rot vel. deg/sec
+WHL=1   # Filter wheel 1=L 2=R 3=G 4=B 5=Longpass 
+BIN=2   # Binning 1,2,3,4 or 8
+
+# Source information
+OBJ=name
+RA=00:00:00.0 
+DEC=00:00:00.0 
+
+# Add axis information 
+CAS=0.0  
+ALT=0.0
+AZM=0.0
+
+# Uncomment one of these as appropriate (with/without axis info)
+#mopcmd -v$VEL -x$TYP -r$ROT -b$BIN -w$WHL -W$DST -e$EXP -O$OBJ -R$RA -D$DEC -C$CAS -A$ALT -Z$AZM 
+mopcmd -v$VEL -x$TYP -r$ROT -b$BIN -w$WHL -W$DST -e$EXP -O$OBJ -R$RA -D$DEC 
+
+echo Done  

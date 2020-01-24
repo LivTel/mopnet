@@ -81,13 +81,11 @@ int main( int argc, char *argv[] )
             mop_log( cam_queue ( cam ), LOG_DBG, FAC, "cam_queue()");
             mop_log( cam_cool( cam, cam_temp, TMO_TOK, cam_quick ), LOG_DBG, FAC, "cam_cool()");
 
-//          Init. filename, get run number and make sure it is available
-            run = FTS_INIT;
-            mop_log( !fts_mkname( cam, fts_pfx, &run ), LOG_DBG, FAC, "fts_mkname(INIT)");
-            if ( fts_run < run )
-                fts_run = run;       
+//          Init. filename, get next available local run number 
+            fts_run = FTS_INIT;
+            mop_log( !fts_mkname( cam, fts_pfx, &fts_run ), LOG_DBG, FAC, "fts_mkname(INIT)");
 
-//          Append a suggested rUn number to message to slave
+//          KLUDGE: Append a suggested local rUn number onto message to slave as -U option
             sprintf( &msg_cpy[ strlen(msg_cpy) ], " -U%i", fts_run ); 
 
 //          If using all cameras then wait for slave temperature stable OK 
@@ -100,11 +98,11 @@ int main( int argc, char *argv[] )
 //              If slave supplied a run number extract it and compare
                 if ( msg_len > strlen(MSG_TOK) )
                 {
-                    sscanf( msg_rcv, MSG_TOK" %i", &run );  
-                    if ( fts_run < run ) 
+                    sscanf( msg_rcv, MSG_TOK" %d", &run );  
+                    if ( run > fts_run ) 
                     {
+                        mop_log( !fts_mkname( cam, fts_pfx, &run ), LOG_WRN, FAC, "Master RUN=%i low. Using Slave RUN=%i)", fts_run, run);
                         fts_run = run;
-                        mop_log( !fts_mkname( cam, fts_pfx, &fts_run ), LOG_DBG, FAC, "fts_mkname(FORCE=%i)", fts_run);
                     }
                 }
             }
@@ -168,9 +166,15 @@ int main( int argc, char *argv[] )
 
 //          Init. filename for this run 
             run = FTS_INIT;           
-            mop_log( !fts_mkname( cam, fts_pfx, &run ), LOG_DBG, FAC, "fts_mkname(first)");
+            mop_log( !fts_mkname( cam, fts_pfx, &run ), LOG_DBG, FAC, "fts_mkname(INIT)");
+
+//          Use Master RUN number f greater than Slave
             if ( fts_run > run )
-                mop_log( !fts_mkname( cam, fts_pfx, &fts_run ), LOG_WRN, FAC, "fts_mkname(force=%i)", fts_run);
+                mop_log( !fts_mkname( cam, fts_pfx, &fts_run ), LOG_WRN, FAC, "Using Master RUN=%i", fts_run);
+            else
+                fts_run = run; // Else use Slave RUN        
+
+//          Tell Master which RUN number is being used
             sprintf( msg_snd, MSG_TOK" %i", fts_run ); 
 
 //          Tell master temperature is OK and wait for ACK
